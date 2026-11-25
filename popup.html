@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root{
+      /* Recollection brand */
+      --bg:#F4EFE6; --surface:#FFFFFF; --surface2:#FBF8F2; --ink:#14142B; --muted:#6E6655; --faint:#A89F8B;
+      --line:rgba(20,20,43,.12); --line2:rgba(20,20,43,.07); --ok:#5B7C5A; --bad:#B3402E; --blue:#C2643B;
+      --grad:linear-gradient(135deg,#C2643B,#A84E2C); --chatgpt:#0d8c6d; --claude:#C2643B;
+      --shadow-sm:0 1px 2px rgba(20,20,43,.05); --shadow:0 4px 14px -6px rgba(20,20,43,.22);
+    }
+    *{box-sizing:border-box}
+    body{width:440px; max-height:600px; margin:0; font:13.5px/1.5 -apple-system,"SF Pro Text",system-ui,sans-serif; letter-spacing:-.01em; background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;}
+    header{padding:13px 16px; border-bottom:1px solid var(--line2); display:flex; align-items:center; gap:10px; background:rgba(244,239,230,.72); backdrop-filter:saturate(180%) blur(12px);}
+    header img{width:24px; height:24px; border-radius:7px; box-shadow:var(--shadow-sm);}
+    header h1{font-size:15px; margin:0; font-weight:650; flex:1;}
+    header .tag{font-size:10px; color:var(--muted); border:1px solid var(--line); padding:2px 8px; border-radius:999px;}
+    header .themebtn{width:26px; height:26px; flex:0 0 auto; display:grid; place-items:center; padding:0; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--muted); cursor:pointer; box-shadow:var(--shadow-sm); transition:color .15s,border-color .15s;}
+    header .themebtn:hover{color:var(--blue); border-color:var(--blue);}
+    header .themebtn svg{width:15px; height:15px;}
+    main{padding:14px 16px 16px; overflow:auto; max-height:520px;}
+    .row{padding:8px 11px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; cursor:pointer; background:var(--surface); box-shadow:var(--shadow-sm); transition:border-color .15s,transform .12s;}
+    .row:hover{border-color:var(--blue); transform:translateY(-1px);}
+    .row .t{display:flex; align-items:center; gap:7px;}
+    .row .title{font-weight:600; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .row .time{color:var(--faint); font-size:11px; flex:0 0 auto;}
+    .row .m{color:var(--muted); font-size:11.5px; margin-top:4px;}
+    .sechd{display:flex; align-items:baseline; justify-content:space-between; margin:16px 2px 9px;}
+    .sechd .l{color:var(--faint); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;}
+    .sechd a{color:var(--blue); font-size:12px; font-weight:600; cursor:pointer;}
+    .sechd a:hover{text-decoration:underline;}
+    .footlinks{display:flex; gap:16px; justify-content:center; align-items:center; margin-top:16px; padding-top:13px; border-top:1px solid var(--line2);}
+    .footlinks a{color:var(--muted); font-size:11.5px; cursor:pointer;}
+    .footlinks a:hover{color:var(--blue);}
+    .footlinks a.danger:hover{color:var(--bad);}
+    /* compact dual-sync header */
+    .sync2{border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:10px;}
+    .srow{display:flex; align-items:center; gap:9px; padding:9px 12px;}
+    .srow + .srow{border-top:1px solid var(--line2);}
+    .srow .ico{width:24px; height:24px; border-radius:7px; display:grid; place-items:center; flex:0 0 auto; font-size:13px;}
+    .srow .ico.obs{background:#EFE7D8; color:var(--ink);}
+    .srow .nm{font-weight:650; font-size:12.5px; flex:0 0 auto;}
+    .srow .st{color:var(--muted); font-size:12px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .srow .st b{color:var(--ink); font-weight:600;} .srow .st .ok{color:var(--ok); font-weight:600;}
+    .srow .act{flex:0 0 auto; display:flex; gap:6px; align-items:center;}
+    .srow .act button{padding:5px 11px; font-size:11.5px; box-shadow:none;}
+    .pill{font-size:10px; font-weight:500; padding:1px 7px; border-radius:999px; border:1px solid var(--line);}
+    .pill.chatgpt{color:var(--chatgpt);} .pill.claude{color:var(--claude);}
+    .empty{color:var(--muted); text-align:center; padding:34px 14px; line-height:1.6;}
+    .empty b{color:var(--ink);}
+    pre{white-space:pre-wrap; word-break:break-word; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; font:12px/1.55 "SF Mono",ui-monospace,Menlo,monospace; max-height:360px; overflow:auto; box-shadow:var(--shadow-sm);}
+    .btns{display:flex; gap:8px; margin:8px 0; flex-wrap:wrap;}
+    button{font:inherit; font-weight:500; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:9px; padding:7px 13px; cursor:pointer; transition:border-color .15s,background .15s,transform .12s; box-shadow:var(--shadow-sm);}
+    button:hover{border-color:var(--blue); transform:translateY(-1px);}
+    button.primary{background:var(--grad); color:#fff; border-color:transparent; font-weight:600; box-shadow:0 4px 12px -3px rgba(194,100,59,.45);}
+    button:disabled{opacity:.5; cursor:default; transform:none;}
+    .seen{font-size:11.5px; border-bottom:1px solid var(--line2); padding:7px 0; display:flex; gap:7px; align-items:baseline;}
+    .seen .u{color:var(--ink); word-break:break-all; flex:1;}
+    .seen .ok{color:var(--ok); font-weight:600;} .seen .no{color:var(--faint);}
+    .back{color:var(--blue); cursor:pointer; font-size:12.5px; font-weight:500; margin-bottom:10px; display:inline-block;}
+    .hint{color:var(--muted); font-size:11.5px; margin-bottom:10px; line-height:1.5;}
+    .status{font-size:11.5px; margin:6px 0; min-height:15px;}
+    .status.ok{color:var(--ok);} .status.bad{color:var(--bad);}
+    .link{color:var(--blue); cursor:pointer; text-decoration:underline;}
+    /* Dark mode: applied via [data-theme="dark"] on <html>, set by the head script
+       (saved choice or OS default) and flipped by the popup's toggle. */
+    :root[data-theme="dark"]{
+      color-scheme:dark;
+      --bg:#161618; --surface:#242427; --surface2:#1d1d20;
+      --ink:#ECECEC; --muted:#9DA0A3; --faint:#73767A;
+      --line:rgba(255,255,255,.13); --line2:rgba(255,255,255,.07);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.5); --shadow:0 4px 16px -6px rgba(0,0,0,.75);
+    }
+    [data-theme="dark"] header{background:rgba(22,22,24,.72);}
+    [data-theme="dark"] .srow .ico.obs{background:rgba(255,255,255,.08);}
+  </style>
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header>
+    <img src="icons/icon128.png" alt="" />
+    <h1>Anamne</h1>
+    <button class="themebtn" id="themebtn" type="button" aria-label="Toggle dark mode"></button>
+    <span class="tag" id="verTag"></span>
+  </header>
+  <main id="main"></main>
+  <script src="config.js"></script>
+  <script src="db.js"></script>
+  <script src="parsers.js"></script>
+  <script src="obsidian.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

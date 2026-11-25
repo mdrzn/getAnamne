@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Anamne — Prompt Library</title>
+  <style>
+    :root{--bg:#F4EFE6;--surface:#FFFFFF;--surface2:#FBF8F2;--ink:#14142B;--muted:#6E6655;--faint:#A89F8B;--line:rgba(20,20,43,.12);--line2:rgba(20,20,43,.07);--blue:#C2643B;--grad:linear-gradient(135deg,#C2643B,#A84E2C);
+      --sans:-apple-system,"SF Pro Text","SF Pro Display",system-ui,sans-serif;--mono:"SF Mono",ui-monospace,Menlo,monospace;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.05);--shadow:0 4px 12px rgba(0,0,0,.06),0 20px 40px -12px rgba(0,0,0,.12)}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;letter-spacing:-.01em;display:flex;flex-direction:column}
+    header{height:58px;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line2);background:rgba(244,239,230,.8);backdrop-filter:blur(12px)}
+    header .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:17px}
+    header .brand img{width:26px;height:26px;border-radius:7px;box-shadow:var(--shadow-sm)}
+    header .sp{flex:1}
+    .layout{flex:1;display:grid;grid-template-columns:minmax(300px,380px) 1fr;min-height:0}
+    .left{border-right:1px solid var(--line2);display:flex;flex-direction:column;min-height:0}
+    .toolbar{padding:14px 16px;display:flex;gap:8px}
+    input,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+    input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+    .search{flex:1}
+    .list{overflow:auto;padding:0 16px 16px;flex:1}
+    .item{padding:12px 13px;border:1px solid var(--line);border-radius:12px;margin-bottom:9px;cursor:pointer;background:var(--surface);box-shadow:var(--shadow-sm)}
+    .item:hover{border-color:var(--blue)}
+    .item.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(194,100,59,.12)}
+    .item .t{font-weight:600;font-size:14.5px}
+    .item .b{color:var(--muted);font-size:12.5px;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .item .m{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .tag{font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.05);border-radius:980px;padding:2px 9px}
+    .vbadge{font-size:10.5px;color:var(--blue)}
+    .right{overflow:auto;padding:26px 30px}
+    .empty{color:var(--faint);text-align:center;padding:60px 16px}
+    .btn{font:inherit;font-weight:600;font-size:14px;border-radius:10px;border:1px solid transparent;padding:9px 15px;cursor:pointer}
+    .btn.p{background:var(--grad);color:#fff;box-shadow:0 4px 12px -3px rgba(194,100,59,.5)}
+    .btn.s{background:rgba(0,0,0,.06);color:var(--ink)}
+    .btn.d{background:none;color:#d11;border:1px solid var(--line)}
+    .field{margin-bottom:16px}
+    .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
+    .field input,.field textarea{width:100%}
+    .field textarea{min-height:200px;resize:vertical;font-family:var(--mono);font-size:13.5px;line-height:1.55}
+    .hint{color:var(--faint);font-size:12px;margin-top:6px}
+    .varchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .varchip{font-family:var(--mono);font-size:11px;color:var(--blue);background:rgba(194,100,59,.1);border-radius:980px;padding:3px 10px}
+    .rowbtns{display:flex;gap:10px;margin-top:8px}
+    .rowbtns .sp{flex:1}
+    h2{font-weight:650;font-size:20px;letter-spacing:-.02em;margin:0 0 4px}
+    .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+    /* Dark mode — follows the OS setting automatically (no toggle). */
+    /* Dark mode: applied via [data-theme="dark"] on <html>, set by the head script
+       (saved choice or OS default). The choice is controlled from the popup's toggle. */
+    :root[data-theme="dark"]{
+      color-scheme:dark;
+      --bg:#161618;--surface:#242427;--surface2:#1d1d20;
+      --ink:#ECECEC;--muted:#9DA0A3;--faint:#73767A;
+      --line:rgba(255,255,255,.13);--line2:rgba(255,255,255,.07);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.5);--shadow:0 4px 16px -6px rgba(0,0,0,.75),0 20px 40px -12px rgba(0,0,0,.7);
+    }
+    [data-theme="dark"] header{background:rgba(22,22,24,.72);}
+    [data-theme="dark"] .tag{background:rgba(255,255,255,.08);}
+    [data-theme="dark"] .btn.s{background:rgba(255,255,255,.08);}
+  </style>
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand"><img src="icons/icon128.png" alt="" />Anamne</span>
+    <span style="color:var(--muted);font-size:13px">Prompt Library</span>
+    <span class="sp"></span>
+    <button class="btn s" id="openArchive">← Archive</button>
+    <button class="btn s" id="import">Import</button>
+    <button class="btn s" id="export">Export</button>
+    <button class="btn p" id="new">+ New prompt</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden />
+  </header>
+  <div class="layout">
+    <section class="left">
+      <div class="toolbar"><input class="search" id="search" placeholder="Search prompts…" autocomplete="off" /></div>
+      <div class="list" id="list"></div>
+    </section>
+    <section class="right" id="editor"></section>
+  </div>
+  <script src="db.js"></script>
+  <script src="prompt-logic.js"></script>
+  <script src="prompts.js"></script>
+</body>
+</html>

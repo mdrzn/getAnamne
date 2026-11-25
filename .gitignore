@@ -1,0 +1,4 @@
+# Build output (reproducible from source)
+dist/
+# OS noise
+.DS_Store
