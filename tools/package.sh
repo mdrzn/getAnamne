@@ -13,7 +13,7 @@ rm -f "$OUT"
 FILES=(
   manifest.json
   config.js theme.js platforms.js
-  background.js inject.js bridge.js picker.js
+  background.js inject.js claude-rest.js bridge.js picker.js
   parsers.js archive-logic.js prompt-logic.js db.js obsidian.js md.js zip.js
   popup.html popup.js
   archive.html archive.js

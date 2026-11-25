@@ -100,7 +100,8 @@ async function handleCapture(p, sender) {
     // Gemini fans out dozens of batchexecute calls; only one carries the
     // conversation. Don't spam the debug log with PARSE-EMPTY for the rest —
     // the request is still visible via the "seen" entry from inject.js.
-    if (p.platform === "gemini") return;
+    // hNvQHb is the conversation read, so a miss there is worth logging.
+    if (p.platform === "gemini" && !/rpcids=hNvQHb/.test(p.url)) return;
     return recordSeen({ url: "PARSE-EMPTY " + p.url, ctype: "shape: " + payloadShape(p.body), matched: false });
   }
   // DEBUG (DEV only): stash the raw body of a successfully-parsed capture per platform

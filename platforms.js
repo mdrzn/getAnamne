@@ -24,7 +24,7 @@
       id: "claude",
       rules: [
         // Also tolerate likely renames (conversations, chat_conversations_v2, no org segment).
-        { re: new RegExp(`/api/(?:organizations/[^/]+/)?(?:chat_)?conversations(?:_v\\d+)?/${UUIDISH}(?:[?#/]|$)`), kind: "conversation-json", not: /\/(?:completion|retry_completion|title|stop_response)/ },
+        { re: new RegExp(`/api/(?:organizations/[^/]+/)?(?:chat_)?conversations(?:_v\\d+)?/${UUIDISH}(?:[?#]|/?$)`), kind: "conversation-json" },
       ],
     },
     {
@@ -71,6 +71,22 @@
     return null;
   }
 
+  // Gemini only requests a conversation (hNvQHb) when it is opened, so a chat
+  // started in the tab is never sent to the page in full. inject.js replays the
+  // same request after each reply; these build it.
+  function geminiChatId(pathname) {
+    const m = String(pathname || "").match(/^(?:\/u\/\d+)?\/app\/([0-9a-f]{8,})\/?$/);
+    return m ? m[1] : null;
+  }
+  function geminiReadRequest({ id, at, bl, sid, hl, reqid, prefix }) {
+    const q = new URLSearchParams({ rpcids: "hNvQHb", "source-path": "/app/" + id, bl, "f.sid": sid, hl, _reqid: String(reqid), rt: "c" });
+    const freq = JSON.stringify([[["hNvQHb", JSON.stringify(["c_" + id, 10, null, 1, [1], [4, 12], null, 1]), null, "generic"]]]);
+    return {
+      url: `${prefix || ""}/_/BardChatUi/data/batchexecute?` + q.toString().replace(/\+/g, "%20"),
+      body: "f.req=" + encodeURIComponent(freq) + "&at=" + encodeURIComponent(at) + "&",
+    };
+  }
+
   // Match patterns for the manifest / content-script injection, per platform.
   const HOST_PATTERNS = {
     chatgpt: ["https://chatgpt.com/*", "https://chat.openai.com/*"],
@@ -81,7 +97,7 @@
     deepseek: ["https://chat.deepseek.com/*"],
   };
 
-  const api = { PLATFORMS, classify, HOST_PATTERNS };
+  const api = { PLATFORMS, classify, HOST_PATTERNS, geminiChatId, geminiReadRequest };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.AnamnePlatforms = api;
 })(typeof self !== "undefined" ? self : this);

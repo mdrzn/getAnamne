@@ -29,8 +29,48 @@
     return null;
   }
 
+  // Gemini only sends a conversation (rpc hNvQHb) when it is opened, never after a
+  // reply, so a chat started in the tab would be saved only on the next reload.
+  // After each reply finishes we send the same hNvQHb request the page sends on
+  // load; its response passes through the fetch wrapper below and is captured.
+  const isGemini = location.hostname === "gemini.google.com";
+  const gemini = { bl: null, sid: null, hl: null, at: null, timer: null };
+  function noteGeminiRequest(url, body) {
+    if (!isGemini || typeof url !== "string" || !url.includes("/batchexecute")) return;
+    try {
+      const q = new URL(url, location.href).searchParams;
+      gemini.bl = q.get("bl") || gemini.bl;
+      gemini.sid = q.get("f.sid") || gemini.sid;
+      gemini.hl = q.get("hl") || gemini.hl;
+      const at = typeof body === "string" && new URLSearchParams(body).get("at");
+      if (at) gemini.at = at;
+    } catch (_) {}
+  }
+  function geminiReplyDone() {
+    clearTimeout(gemini.timer);
+    gemini.timer = setTimeout(() => { if (!refetchGemini()) gemini.timer = setTimeout(refetchGemini, 6000); }, 2500);
+  }
+  function refetchGemini() {
+    const P = window.AnamnePlatforms;
+    const W = window.WIZ_global_data || {};
+    const id = P && P.geminiChatId(location.pathname);
+    const at = W.SNlM0e || gemini.at, bl = gemini.bl || W.cfb2h, sid = gemini.sid || W.FdrFJe;
+    if (!id || !at || !bl || !sid) return false;
+    const r = P.geminiReadRequest({
+      id, at, bl, sid, hl: gemini.hl || "en",
+      reqid: 100000 + Math.floor(Math.random() * 900000),
+      prefix: (location.pathname.match(/^\/u\/\d+/) || [""])[0],
+    });
+    window.fetch(r.url, {
+      method: "POST", credentials: "include", body: r.body,
+      headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8", "x-same-domain": "1" },
+    }).catch(() => {});
+    return true;
+  }
+
   async function handle(url, response) {
     const ctype = (response.headers && response.headers.get("content-type")) || "";
+    if (isGemini && url.includes("/StreamGenerate")) response.text().then(geminiReplyDone, () => {});
     const meta = classify(url);
     // Always log what we saw, matched or not — this drives the debug panel.
     send({ type: "seen", url, ctype, matched: !!meta, kind: meta && meta.kind, platform: meta && meta.platform });
@@ -66,6 +106,7 @@
       p.then((res) => {
         try {
           const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+          noteGeminiRequest(url, args[1] && args[1].body);
           handle(url, res.clone());
         } catch (_) {}
       }).catch(() => {});
@@ -82,10 +123,12 @@
       this.__cam_url = url;
       return open.apply(this, arguments);
     };
-    OrigXHR.prototype.send = function () {
+    OrigXHR.prototype.send = function (body) {
+      noteGeminiRequest(this.__cam_url, body);
       this.addEventListener("load", function () {
         try {
           const url = this.__cam_url;
+          if (isGemini && typeof url === "string" && url.includes("/StreamGenerate")) geminiReplyDone();
           const meta = classify(url);
           const ctype = this.getResponseHeader && this.getResponseHeader("content-type") || "";
           send({ type: "seen", url, ctype, matched: !!meta, kind: meta && meta.kind, platform: meta && meta.platform });

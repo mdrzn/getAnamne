@@ -2,6 +2,7 @@ import { createRequire } from "module";
 import assert from "assert";
 const require = createRequire(import.meta.url);
 const { classify, PLATFORMS } = require("../platforms.js");
+const { claudeChatId, claudeOrgFromCookie, claudeConversationUrl } = require("../claude-rest.js");
 
 let pass = 0;
 const ok = (name, fn) => {
@@ -68,6 +69,34 @@ ok("non-string → null", () => {
 
 ok("every platform is registered", () => {
   assert.deepEqual(PLATFORMS.map((p) => p.id), ["chatgpt", "claude", "gemini", "perplexity", "grok", "deepseek"]);
+});
+
+ok("Claude side requests under a conversation are not conversations", () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  assert.equal(classify(`/api/organizations/${id}/chat_conversations/${id}/shares`), null);
+  assert.equal(classify(`/api/organizations/${id}/chat_conversations/${id}/composer_notices`), null);
+  assert.deepEqual(classify(`/api/organizations/${id}/chat_conversations/${id}/`), { platform: "claude", kind: "conversation-json" });
+});
+
+ok("Claude active fetch: conversation id from the page path", () => {
+  const id = "c49b9c8e-061d-4bf6-b12c-992c88121077";
+  assert.equal(claudeChatId(`/chat/${id}`), id);
+  assert.equal(claudeChatId(`/chat/${id}/`), id);
+  assert.equal(claudeChatId("/new"), null);
+  assert.equal(claudeChatId("/project/019b2226-e4f2-7079-b067-971748ed7472"), null);
+  assert.equal(claudeChatId("/chat/not-a-uuid"), null);
+});
+
+ok("Claude active fetch: organization from the lastActiveOrg cookie", () => {
+  assert.equal(claudeOrgFromCookie("a=1; lastActiveOrg=056f177a-c9b2-4eeb-b042-bc4687b6d98b; b=2"), "056f177a-c9b2-4eeb-b042-bc4687b6d98b");
+  assert.equal(claudeOrgFromCookie("a=1; b=2"), null);
+  assert.equal(claudeOrgFromCookie("lastActiveOrg=../evil"), null);
+});
+
+ok("Claude active fetch: REST URL matches the capture rule", () => {
+  const u = claudeConversationUrl("aaaaaaaa-2222-4333-8444-555555555555", "bbbbbbbb-2222-4333-8444-555555555555");
+  assert.equal(u, "/api/organizations/aaaaaaaa-2222-4333-8444-555555555555/chat_conversations/bbbbbbbb-2222-4333-8444-555555555555?tree=True&rendering_mode=messages&render_all_tools=true");
+  assert.deepEqual(classify(u), { platform: "claude", kind: "conversation-json" });
 });
 
 console.log(`\n${pass} checks passed.`);

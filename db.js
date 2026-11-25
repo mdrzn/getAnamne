@@ -73,7 +73,7 @@
         const prev = get.result;
         const merged = {
           ...conv,
-          messages: prev && conv.platform === "chatgpt" && root.CAMParsers
+          messages: prev && (conv.platform === "chatgpt" || conv.platform === "gemini") && root.CAMParsers
             ? root.CAMParsers.mergeMessages(prev.messages, conv.messages)
             : conv.messages,
           capturedAt: conv.capturedAt || Date.now(),

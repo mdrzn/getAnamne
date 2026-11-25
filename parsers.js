@@ -462,9 +462,15 @@
       if (!geminiIsRealTurn(turn)) continue;
       const cid = turn[0][0];
       if (!convId) convId = cid.slice(2);
-      const last = turn[turn.length - 1];
-      const ts = Array.isArray(last) && typeof last[0] === "number" ? last[0] : 0;
-      items.push({ user: geminiTurnUser(turn), asst: geminiTurnAssistant(turn), ts });
+      // The turn's [seconds, nanos] used to be its last element; since Nov 2026 it
+      // sits at turn[4], followed by other fields. Take the first such pair after
+      // the content.
+      const tsPair = turn.slice(4).find((x) => Array.isArray(x) && x.length === 2 && typeof x[0] === "number" && typeof x[1] === "number");
+      const ts = tsPair ? tsPair[0] : 0;
+      const rcId = turn[3] && turn[3][0] && turn[3][0][0] && turn[3][0][0][0];
+      items.push({ user: geminiTurnUser(turn), asst: geminiTurnAssistant(turn), ts,
+        userId: typeof turn[0][1] === "string" ? turn[0][1] + ":user" : null,
+        asstId: typeof rcId === "string" ? rcId : null });
     }
     items.sort((a, b) => a.ts - b.ts); // newest-first in payload → oldest-first
     // Gemini embeds generated images as placeholder tokens
@@ -477,8 +483,10 @@
     const messages = [];
     for (const it of items) {
       const u = clean(it.user), a = clean(it.asst);
-      if (u) messages.push({ role: "user", text: u, time: it.ts || null });
-      if (a) messages.push({ role: "assistant", text: a, time: it.ts || null });
+      // Ids let a reload (Gemini sends the last 10 turns) merge into the stored
+      // conversation instead of replacing it. The reply sorts just after its prompt.
+      if (u) messages.push({ id: it.userId, role: "user", text: u, time: it.ts || null });
+      if (a) messages.push({ id: it.asstId, role: "assistant", text: a, time: it.ts ? it.ts + 0.001 : null });
     }
     if (!messages.length) return null;
     return {

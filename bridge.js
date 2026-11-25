@@ -2,16 +2,62 @@
 // to the extension service worker (the page context can't call chrome.* APIs).
 (function () {
   "use strict";
+  const forward = (payload) => {
+    try {
+      chrome.runtime.sendMessage({ from: "cam", payload });
+    } catch (_) {
+      // service worker may be asleep; messages are best-effort
+    }
+  };
   window.addEventListener("message", (e) => {
     if (e.source !== window) return;
     const d = e.data;
     if (!d || d.source !== "CAM_CAPTURE" || !d.payload) return;
-    try {
-      chrome.runtime.sendMessage({ from: "cam", payload: d.payload });
-    } catch (_) {
-      // service worker may be asleep; messages are best-effort in the spike
-    }
+    forward(d.payload);
+    if (claude && d.payload.type === "seen") claude.onSeen(d.payload.url || "");
   });
+
+  // Claude (Nov 2026) loads conversations over a protobuf RPC Anamne can't read,
+  // so we request the JSON endpoint ourselves: when a chat opens, after the user
+  // sends a message (a few times, while the reply streams), and when the tab is
+  // hidden. Same-origin with the live session, so no extra permission.
+  const claude = location.hostname === "claude.ai" && self.AnamneClaudeRest ? claudeFetcher(self.AnamneClaudeRest) : null;
+
+  function claudeFetcher(P) {
+    let org = null, lastPath = null, lastAt = 0, lastId = null;
+    const timers = [];
+    async function fetchNow() {
+      const id = P.claudeChatId(location.pathname);
+      const o = P.claudeOrgFromCookie(document.cookie) || org;
+      if (!id || !o) return;
+      if (id === lastId && Date.now() - lastAt < 3000) return;
+      lastId = id; lastAt = Date.now();
+      const url = P.claudeConversationUrl(o, id);
+      try {
+        const r = await fetch(url, { credentials: "include" });
+        forward({ type: "seen", url, ctype: (r.headers.get("content-type") || "") + " (requested by Anamne)", matched: true, kind: "conversation-json", platform: "claude" });
+        if (r.ok) forward({ type: "capture", platform: "claude", kind: "json", url, body: await r.text() });
+      } catch (err) {
+        forward({ type: "error", url, message: String((err && err.message) || err) });
+      }
+    }
+    const at = (...delays) => {
+      while (timers.length) clearTimeout(timers.pop());
+      for (const d of delays) timers.push(setTimeout(fetchNow, d));
+    };
+    setInterval(() => {
+      if (location.pathname !== lastPath) { lastPath = location.pathname; at(1500); }
+    }, 1000);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) fetchNow(); });
+    return {
+      onSeen(url) {
+        const m = url.match(/\/api\/organizations\/([0-9a-f-]{36})\//i);
+        if (m) org = m[1];
+        // Sending, retrying or editing a message: the reply lands over the next minute or so.
+        if (/ConversationService\/(PerformAction|SendMessage|Generate)|\/(retry_)?completion\b/.test(url)) at(8000, 30000, 90000);
+      },
+    };
+  }
 
   // Image capture: the background asks us to fetch image bytes for a captured
   // ChatGPT conversation. We run in the page origin with the live session, so a

@@ -102,9 +102,11 @@ The extension makes these network requests:
 |---|---|---|
 | ChatGPT images | `chatgpt.com`, with your existing session | when a captured ChatGPT conversation has images |
 | Gemini images | `lh3.googleusercontent.com` | when a captured Gemini conversation has images |
+| Claude conversations | `claude.ai`, with your existing session | when you open a Claude conversation, and shortly after each reply |
+| Gemini conversations | `gemini.google.com`, with your existing session | shortly after each Gemini reply |
 | Problem report | `getanamne.com/report.php`, forwarded to the developer on Telegram | only when you fill in **Report a problem** and click Send |
 
-Everything else it reads is traffic the chat site's own page already made.
+Everything else it reads is traffic the chat site's own page already made. The Claude and Gemini requests ask the site for the same conversation data its own page requests, and nothing leaves your browser.
 
 ## Limitations
 
