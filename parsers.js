@@ -33,6 +33,103 @@
       .replace(/\n{3,}/g, "\n\n");
   }
 
+  // ChatGPT answers (from late 2026) carry JSX-like UI markup: layout containers
+  // (<box>, <row>…), icons, dividers, drafts in <WritingBlock>, citations. ChatGPT
+  // draws them; in Markdown they are noise. Turn them into plain Markdown: drafts
+  // become blockquotes, dividers "---", list items bullets, and containers vanish
+  // leaving their text. Fenced code and other code spans are left alone, and
+  // running it again on its own output changes nothing.
+  const UI_ATTRS = String.raw`(?:\s+[A-Za-z_:-]+(?:=(?:"[^"]*"|\{(?:[^{}]|\{[^{}]*\})*\}|[^\s/>]+))?)*`;
+  const UI_LAYOUT = "box|row|col|grid|grid-item|stack|list|list-item|table|table-row|table-cell";
+  const UI_DROP = "icon|Cite|FileCite|MemoryCite|AsyncImage|AsyncImageGroup|Chart|LearningViz|radio|checkbox|slider|button|input|spacer";
+  const RE_UI_DROP = new RegExp(`<(?:${UI_DROP})\\b${UI_ATTRS}\\s*/>`, "g");
+  const RE_UI_LAYOUT = new RegExp(`<(/?)(${UI_LAYOUT})\\b${UI_ATTRS}\\s*(/?)>`, "g");
+  const RE_UI_DIVIDER = new RegExp(`^\\s*<divider\\b${UI_ATTRS}\\s*/>\\s*$`);
+  const RE_UI_CODESPAN = /^<\/?(?:Cite|FileCite|MemoryCite|Entity|AsyncImage|icon|badge|text|title|caption|Link)\b/;
+
+  function uiInlinePlain(s) {
+    return s
+      .replace(/<Entity\b[^>]*?\bvalue="([^"]*)"[^>]*\/>/g, "$1")
+      .replace(/<Link\s+url="([^"]*)"(?:\s+title="([^"]*)")?\s*(?:\/>|>([^<]*)<\/Link>)/g,
+        (_, url, title, label) => `[${title || (label || "").trim() || url}](${url})`)
+      .replace(RE_UI_DROP, "")
+      .replace(/<title\b[^>]*>(.*?)<\/title>/g, "**$1**")
+      .replace(/<(badge|text|caption)\b[^>]*>(.*?)<\/\1>/g, "$2")
+      .replace(RE_UI_LAYOUT, (_, close, name, self) => (name === "list-item" && !close && !self ? "- " : ""));
+  }
+
+  // Inline conversion, skipping code spans unless they only wrap a UI tag.
+  function uiInline(line) {
+    return line.replace(/(`+)([^`]*?)\1|([^`]+|`+)/g, (m, ticks, inner, plain) => {
+      if (plain !== undefined) return uiInlinePlain(plain);
+      return RE_UI_CODESPAN.test(inner.trim()) ? uiInlinePlain(inner) : m;
+    });
+  }
+  const stripCodeSpans = (line) => line.replace(/(`+)[^`]*?\1/g, "");
+
+  function cleanChatGPTMarkup(text) {
+    const lines = String(text || "").split("\n");
+    const out = [];
+    let fence = false, mode = null, depth = 0;
+    for (const line of lines) {
+      if (mode === "code") {
+        const end = line.indexOf("</CodeBlock>");
+        if (end < 0) { out.push(line); continue; }
+        if (line.slice(0, end).trim()) out.push(line.slice(0, end));
+        out.push("```");
+        mode = null;
+        continue;
+      }
+      if (/^\s*(```|~~~)/.test(line)) { fence = !fence; out.push(line); continue; }
+      if (fence) { out.push(line); continue; }
+
+      const cb = line.match(/^\s*<CodeBlock\b([^>]*)>(.*)$/);
+      if (cb) {
+        const lang = (cb[1].match(/\b(?:language|lang)="([^"]*)"/) || [])[1] || "";
+        out.push("```" + lang);
+        const end = cb[2].indexOf("</CodeBlock>");
+        const rest = end < 0 ? cb[2] : cb[2].slice(0, end);
+        if (rest.trim()) out.push(rest);
+        if (end < 0) mode = "code"; else out.push("```");
+        continue;
+      }
+
+      if (mode === "writing" || line.includes("<WritingBlock")) {
+        let s = line;
+        if (mode !== "writing") {
+          const at = s.indexOf("<WritingBlock");
+          const before = s.slice(0, at);
+          if (before.trim()) out.push(uiInline(before).trimEnd(), "");
+          s = s.slice(at).replace(/^<WritingBlock\b[^>]*>/, "");
+          mode = "writing";
+        }
+        const end = s.indexOf("</WritingBlock>");
+        const body = end < 0 ? s : s.slice(0, end);
+        out.push(body.trim() ? "> " + uiInline(body).trim() : ">");
+        if (end >= 0) {
+          mode = null;
+          const after = s.slice(end + "</WritingBlock>".length);
+          if (after.trim()) out.push("", uiInline(after).trim());
+        }
+        continue;
+      }
+
+      if (RE_UI_DIVIDER.test(line)) { out.push("", "---", ""); continue; }
+      const bare = stripCodeSpans(line);
+      let opens = 0, closes = 0;
+      for (const m of bare.matchAll(RE_UI_LAYOUT)) {
+        if (m[1]) closes++; else if (!m[3]) opens++;
+      }
+      const inside = depth > 0 || opens > 0 || closes > 0;
+      depth = Math.max(0, depth + opens - closes);
+      let c = uiInline(line);
+      if (c !== line) c = c.replace(/ {2,}/g, " ").trimEnd();
+      if (inside) c = c.trimStart();
+      out.push(c.trim() === "" && line.trim() !== "" ? "" : c);
+    }
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   // Pulls the conversation UUID out of the request URL, the fallback when a
   // payload no longer carries its own id.
   const UUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
@@ -102,6 +199,7 @@
       // everything else keeps its text exactly as before.
       let txt = role === "tool" ? "" : textParts.join("\n");
       txt = cleanChatGPTText(txt).trim();
+      if (role !== "user") txt = cleanChatGPTMarkup(txt);
       if (!txt && !imgs.length) continue;
       messages.push({
         id: m.id,
@@ -557,7 +655,9 @@
     for (const m of conv.messages || []) {
       const ts = isoDateTime(m.time);
       body += `## ${speaker(m.role)}${ts ? " · " + ts : ""}\n\n`;
-      if (m.text) body += `${String(m.text).trim()}\n\n`;
+      let text = String(m.text || "").trim();
+      if (conv.platform === "chatgpt" && m.role !== "user") text = cleanChatGPTMarkup(text);
+      if (text) body += `${alignTables(text)}\n\n`;
       for (const fid of m.images || []) {
         const p = pathByFile[fid];
         if (p) body += `![${p.vaultName}](<${p.relPath}>)\n\n`;
@@ -614,6 +714,102 @@
     return all;
   }
 
+  // ── Markdown tables ──────────────────────────────────────────────────────────
+  // Chat sites send GFM tables with no padding ("|---|---:|"). alignTables pads
+  // every column to one width so the table also reads as a table in the raw note;
+  // readTable is shared with the archive reader (md.js) to render them.
+
+  // Split "| a | b |" into ["a", "b"]. Pipes inside `code` or escaped as \| stay.
+  function splitTableRow(line) {
+    let s = line.trim();
+    if (s.startsWith("|")) s = s.slice(1);
+    if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
+    const cells = [];
+    let cur = "", code = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === "\\" && s[i + 1] === "|") { cur += "\\|"; i++; continue; }
+      if (ch === "`") code = !code;
+      if (ch === "|" && !code) { cells.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    cells.push(cur.trim());
+    return cells;
+  }
+
+  function cellAlign(sep) {
+    if (/^:-+:$/.test(sep)) return "c";
+    if (/^-+:$/.test(sep)) return "r";
+    if (/^:-+$/.test(sep)) return "l";
+    if (/^-+$/.test(sep)) return "";
+    return null;
+  }
+
+  // A table starting at lines[i], or null: { header, aligns, rows, end }.
+  function readTable(lines, i) {
+    const head = lines[i], sepLine = lines[i + 1];
+    if (!head || sepLine == null || !head.includes("|") || !sepLine.includes("-")) return null;
+    const header = splitTableRow(head);
+    const aligns = splitTableRow(sepLine).map(cellAlign);
+    if (aligns.length !== header.length || aligns.some((a) => a === null)) return null;
+    const rows = [];
+    let j = i + 2;
+    while (j < lines.length && lines[j].includes("|") && lines[j].trim()) {
+      const cells = splitTableRow(lines[j]);
+      rows.push(header.map((_, k) => cells[k] || ""));
+      j++;
+    }
+    return { header, aligns, rows, end: j };
+  }
+
+  // Monospace width: CJK and emoji take two columns, combining marks none.
+  function textWidth(s) {
+    let w = 0;
+    for (const ch of s) {
+      if (/[̀-ͯ​-‍︀-️]/.test(ch)) continue;
+      const c = ch.codePointAt(0);
+      const wide = /\p{Extended_Pictographic}/u.test(ch) ||
+        (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
+        (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) ||
+        (c >= 0xffe0 && c <= 0xffe6) || (c >= 0x20000 && c <= 0x3fffd);
+      w += wide ? 2 : 1;
+    }
+    return w;
+  }
+
+  function formatTable({ header, aligns, rows }) {
+    const widths = header.map((h, k) => Math.max(3, textWidth(h), ...rows.map((r) => textWidth(r[k]))));
+    const pad = (s, k) => {
+      const gap = widths[k] - textWidth(s);
+      if (aligns[k] === "r") return " ".repeat(gap) + s;
+      if (aligns[k] === "c") return " ".repeat(Math.floor(gap / 2)) + s + " ".repeat(Math.ceil(gap / 2));
+      return s + " ".repeat(gap);
+    };
+    const row = (cells) => "| " + cells.map(pad).join(" | ") + " |";
+    const sep = "|" + widths.map((w, k) => {
+      const a = aligns[k];
+      if (a === "c") return ":" + "-".repeat(w) + ":";
+      if (a === "r") return "-".repeat(w + 1) + ":";
+      if (a === "l") return ":" + "-".repeat(w + 1);
+      return "-".repeat(w + 2);
+    }).join("|") + "|";
+    return [row(header), sep, ...rows.map(row)];
+  }
+
+  function alignTables(text) {
+    const lines = String(text).split("\n");
+    const out = [];
+    let fence = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*(```|~~~)/.test(lines[i])) fence = !fence;
+      const t = fence ? null : readTable(lines, i);
+      if (!t) { out.push(lines[i]); continue; }
+      out.push(...formatTable(t));
+      i = t.end - 1;
+    }
+    return out.join("\n");
+  }
+
   const api = {
     mergeMessages,
     parseChatGPT,
@@ -632,6 +828,9 @@
     geminiImageAssets,
     assetVaultPaths,
     attachmentsMarkdown,
+    alignTables,
+    readTable,
+    cleanChatGPTMarkup,
   };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;

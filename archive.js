@@ -209,7 +209,7 @@ function renderList() {
         <label class="ck"><input type="checkbox" data-ck="${esc(c.id)}"${checked ? " checked" : ""} /></label>
         <div class="cbody">
           <div class="t">${highlight(c.title, state.query)} <span class="pill ${esc(c.platform)}">${esc(c.platform)}</span></div>
-          <div class="sn">${highlight(ArchiveLogic.snippet(c, state.query, 140), state.query)}</div>
+          <div class="sn">${highlight(ArchiveLogic.snippet(cleanedView(c), state.query, 140), state.query)}</div>
           <div class="meta">
             <span>${(c.messages || []).length} msgs</span>
             ${c.images && c.images.length ? `<span title="${c.images.length} image${c.images.length === 1 ? "" : "s"}">🖼 ${c.images.length}</span>` : ""}
@@ -481,13 +481,27 @@ function msgTime(t) {
   if (!ms || isNaN(ms)) return "";
   return new Date(ms).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
+// ChatGPT records saved before 1.2.2 may still carry ChatGPT's UI markup; clean
+// their text for display (cached per record object).
+const cleanedViews = new WeakMap();
+function cleanedView(c) {
+  if (c.platform !== "chatgpt") return c;
+  let v = cleanedViews.get(c);
+  if (!v) {
+    v = { ...c, messages: (c.messages || []).map((m) => (m.role === "user" ? m : { ...m, text: CAMParsers.cleanChatGPTMarkup(m.text) })) };
+    cleanedViews.set(c, v);
+  }
+  return v;
+}
+
 function renderMessages(c) {
   return (c.messages || [])
     .map((m) => {
       const who = m.role === "assistant" ? CAMParsers.assistantName(c.platform) : "You";
       const t = msgTime(m.time);
       // Markdown-render the message body (renderer escapes HTML internally).
-      const body = m.text ? `<div class="bubble"><div class="txt md">${AnamneMD.renderMarkdown(m.text)}</div></div>` : "";
+      const text = c.platform === "chatgpt" && m.role !== "user" ? CAMParsers.cleanChatGPTMarkup(m.text) : m.text;
+      const body = text ? `<div class="bubble"><div class="txt md">${AnamneMD.renderMarkdown(text)}</div></div>` : "";
       const fids = (m.images || []).join(",");
       const imgs = fids ? `<div class="msgimgs" data-imgs="${esc(fids)}"></div>` : "";
       return `<div class="msg ${esc(m.role)}"><div class="who">${who}${t ? ` <span class="wt">· ${t}</span>` : ""}</div>${body}${imgs}</div>`;

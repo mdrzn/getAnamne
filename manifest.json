@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Anamne — your AI conversation memory",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Save your ChatGPT, Claude, Gemini and other AI chats to a private, searchable archive and sync them to Obsidian. Free, no account.",
   "permissions": [
     "storage",

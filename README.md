@@ -18,6 +18,7 @@ ChatGPT, Claude, Gemini, Perplexity, Grok and DeepSeek in one place, synced to O
 - **Images:** pictures generated in ChatGPT and Gemini, and the ones you uploaded, are stored with the conversation and written next to the note.
 - **Export all:** every conversation as Markdown, with its images, in one `.zip`. Single conversations export as `.md`.
 - **Prompt library:** save prompts with `{{variables}}` and insert them from a button on the chat sites; Anamne asks for the values first.
+- **Report a problem** from the popup: pick the site and what's wrong, add a note if you like, and it reaches the developer. Nothing from your conversations is sent.
 - **Light and dark theme.**
 
 ### Search
@@ -55,7 +56,7 @@ The file is named `2026-11-24 Database schema for a billing system (8f3a21c4).md
 | | |
 |---|---|
 | ![Prompt library](docs/prompts.png) | ![Popup](docs/popup.png) |
-| Prompts with `{{variables}}`, searchable, with a use count. | The popup: Obsidian status, the latest captures and a link to the archive. |
+| Prompts with `{{variables}}`, searchable, with a use count. Import and export as JSON. | The popup: Obsidian status, the latest captures and a link to the archive. |
 
 <p><img src="docs/archive-dark.png" alt="The archive in dark theme"></p>
 
@@ -93,14 +94,15 @@ When a site changes its API, the popup's **Diagnostics** view lists every reques
 
 ## Privacy
 
-Anamne has no server, no account and no analytics. Conversations are stored in your browser's IndexedDB and leave it only when you sync or export them to a folder you chose.
+Anamne has no account and no analytics, and no server ever receives your conversations. They're stored in your browser's IndexedDB and leave it only when you sync or export them to a folder you chose.
 
-The extension makes network requests for one thing, fetching the images that belong to a conversation you opened:
+The extension makes these network requests:
 
 | What | Where | When |
 |---|---|---|
 | ChatGPT images | `chatgpt.com`, with your existing session | when a captured ChatGPT conversation has images |
 | Gemini images | `lh3.googleusercontent.com` | when a captured Gemini conversation has images |
+| Problem report | `getanamne.com/report.php`, forwarded to the developer on Telegram | only when you fill in **Report a problem** and click Send |
 
 Everything else it reads is traffic the chat site's own page already made.
 

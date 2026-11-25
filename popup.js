@@ -16,6 +16,7 @@ function openPrompts() {
 
 async function render() {
   if (tab === "convs") return renderConvs(await AnamneDB.getAllConversations());
+  if (tab === "report") return renderReport(await AnamneDB.getAllConversations());
   const store = await chrome.storage.local.get(SEEN_KEY);
   return renderDebug(store[SEEN_KEY] || []);
 }
@@ -80,6 +81,7 @@ async function renderConvs(list) {
     <a id="openPrompts">Prompt library</a>
     ${list.length ? `<a id="clearAll" class="danger">Clear all</a>` : ""}
     <a id="openDiag">Diagnostics</a>
+    <a id="openReport">Report a problem</a>
   </div>`;
 
   if (!list.length) {
@@ -120,6 +122,8 @@ function wireFooter() {
   if (p) p.onclick = openPrompts;
   const d = document.getElementById("openDiag");
   if (d) d.onclick = () => { tab = "debug"; render(); };
+  const r = document.getElementById("openReport");
+  if (r) r.onclick = () => { tab = "report"; render(); };
   const c = document.getElementById("clearAll");
   if (c) c.onclick = async () => {
     if (!confirm("Remove all conversations from this device? Files already written to your Obsidian folder stay where they are.")) return;
@@ -249,6 +253,79 @@ function renderDebug(seen) {
   };
   copyBody("gemini", "copygemini");
   copyBody("chatgpt", "copychatgpt");
+  wireBackToConvs();
+}
+
+// "Report a problem": a short, fixed-choice report sent to the developer only when
+// the user clicks Send. No conversation content and no request log is included.
+const REPORT_URL = "https://getanamne.com/report.php";
+const REPORT_SITES = { ChatGPT: "chatgpt", Claude: "claude", Gemini: "gemini", Perplexity: "perplexity", Grok: "grok", DeepSeek: "deepseek", "All sites": null };
+const REPORT_PROBLEMS = ["Conversations aren't saved", "Some messages are missing", "Images aren't saved", "Obsidian sync doesn't work", "Something else"];
+
+function browserLabel() {
+  const ua = navigator.userAgent;
+  const m = ua.match(/(Edg|OPR|Chrome)\/(\d+)/);
+  const name = m ? { Edg: "Edge", OPR: "Opera", Chrome: "Chrome" }[m[1]] + " " + m[2] : "Unknown browser";
+  const os = /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : "";
+  return os ? name + " · " + os : name;
+}
+
+function renderReport(list) {
+  const lastSaved = (site) => {
+    const key = REPORT_SITES[site];
+    const ts = Math.max(0, ...list.filter((c) => !key || c.platform === key).map((c) => c.capturedAt || 0));
+    return ts ? new Date(ts).toISOString().slice(0, 10) : "never";
+  };
+  const opts = (xs) => xs.map((x) => `<option>${esc(x)}</option>`).join("");
+  main.innerHTML =
+    backToConvsLink() +
+    `<form class="report" id="reportForm">
+      <label>Site<select id="rSite">${opts(Object.keys(REPORT_SITES))}</select></label>
+      <label>Problem<select id="rProblem">${opts(REPORT_PROBLEMS)}</select></label>
+      <label>Details <span class="opt">(optional)</span><textarea id="rNote" maxlength="600" rows="3" placeholder="What did you expect, and what happened?"></textarea></label>
+      <label>Your email <span class="opt">(optional, if you'd like a reply)</span><input id="rEmail" type="email" maxlength="120"></label>
+      <div class="hint" id="rAlso"></div>
+      <div class="btns"><button class="primary" id="rSend" type="submit">Send report</button></div>
+      <div class="status" id="status"></div>
+    </form>`;
+  const site = document.getElementById("rSite");
+  const also = () => {
+    document.getElementById("rAlso").textContent =
+      `Also sent: Anamne v${chrome.runtime.getManifest().version}, ${browserLabel()}, last save from ${site.value}: ${lastSaved(site.value)}. ` +
+      `Nothing from your conversations is included.`;
+  };
+  site.onchange = also;
+  also();
+  document.getElementById("reportForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const send = document.getElementById("rSend");
+    send.disabled = true;
+    setStatus("Sending…");
+    try {
+      const resp = await fetch(REPORT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site: site.value,
+          problem: document.getElementById("rProblem").value,
+          note: document.getElementById("rNote").value,
+          email: document.getElementById("rEmail").value,
+          version: chrome.runtime.getManifest().version,
+          browser: browserLabel(),
+          lastSaved: lastSaved(site.value),
+        }),
+      });
+      if (resp.ok) {
+        main.innerHTML = backToConvsLink() + `<div class="empty"><b>Thanks, report sent.</b><br>I'll look into it.</div>`;
+        wireBackToConvs();
+        return;
+      }
+      setStatus(resp.status === 429 ? "Too many reports right now. Try again later." : "Couldn't send the report. Try again later.", "bad");
+    } catch (_) {
+      setStatus("Couldn't send the report. Check your connection.", "bad");
+    }
+    send.disabled = false;
+  };
   wireBackToConvs();
 }
 
